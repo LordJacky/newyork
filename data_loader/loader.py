@@ -133,6 +133,43 @@ class DataLoader:
         return df
 
     @staticmethod
+    @cache_result("subway_ridership.parquet")
+    def download_subway_ridership() -> pd.DataFrame:
+        """Download MTA subway hourly ridership data with pagination"""
+        client = Socrata("data.ny.gov", None)
+
+        # Pagination to not exceed row limits
+        all_results = []
+        offset = 0
+        limit = 50000
+
+        while True:
+            results = client.get("wujg-7c2s", limit=limit, offset=offset)
+            if not results:
+                break
+            all_results.extend(results)
+            offset += limit
+            # Limit total records to avoid excessive loading
+            if offset >= 500000:
+                break
+
+        df = pd.DataFrame.from_records(all_results)
+
+        if df.empty:
+            return df
+
+        if "ridership" in df.columns:
+            df["ridership"] = pd.to_numeric(df["ridership"], errors="coerce")
+        if "latitude" in df.columns:
+            df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+        if "longitude" in df.columns:
+            df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+
+        df = df.dropna(subset=["longitude", "latitude"])
+
+        return df
+
+    @staticmethod
     @cache_result("subway_stations.parquet")
     def download_subway_stations() -> pd.DataFrame:
         """Download MTA subway station data from NY State Open Data"""

@@ -10,9 +10,11 @@ class Scorer:
         parks_df,
         restaurants_df,
         subway_df,
+        ridership_df=None,
         min_park_area=5.0,
         max_park_distance=500,
         restaurant_radius=500,
+        max_restaurant_score=27,
     ):
         """
         Initialize scorer with data
@@ -21,9 +23,11 @@ class Scorer:
             parks_df: DataFrame with parks data
             restaurants_df: DataFrame with restaurants data
             subway_df: DataFrame with subway stations data
+            ridership_df: DataFrame with subway ridership data (optional)
             min_park_area: Minimum park area in acres
             max_park_distance: Maximum distance to subway in meters
             restaurant_radius: Radius in meters to count restaurants for social activity
+            max_restaurant_score: Maximum inspection score for quality restaurants (0-13=A, 14-27=B, 28+=C)
         """
         # Convert to GeoDataFrames with proper CRS (WGS84) https://en.wikipedia.org/wiki/Spatial_reference_system
         self.parks_gdf = gpd.GeoDataFrame(
@@ -40,11 +44,51 @@ class Scorer:
             crs="EPSG:4326",
         )
 
-        self.subway_gdf = gpd.GeoDataFrame(
+        subway_gdf = gpd.GeoDataFrame(
             subway_df,
             geometry=gpd.points_from_xy(subway_df.longitude, subway_df.latitude),
             crs="EPSG:4326",
         )
+
+        # Merge ridership data to subway stations
+        if ridership_df is not None and not ridership_df.empty:
+            # Aggregate ridership by station complex (average hourly, then daily)
+            ridership_agg = (
+                ridership_df.groupby(["station_complex", "station_complex_id"])
+                .agg({"ridership": "mean", "latitude": "first", "longitude": "first"})
+                .reset_index()
+            )
+
+            # Calculate daily ridership estimate (hourly * 24)
+            ridership_agg["avg_daily_ridership"] = (
+                (ridership_agg["ridership"] * 24).round(0).astype(int)
+            )
+
+            ridership_gdf = gpd.GeoDataFrame(
+                ridership_agg,
+                geometry=gpd.points_from_xy(
+                    ridership_agg.longitude, ridership_agg.latitude
+                ),
+                crs="EPSG:4326",
+            )
+            # Join nearest ridership data to subway stations
+            subway_with_ridership = subway_gdf.sjoin_nearest(
+                ridership_gdf[["geometry", "station_complex", "avg_daily_ridership"]],
+                how="left",
+                max_distance=0.001,  # ~100m tolerance for matching
+            )
+            # Drop index_right column created by sjoin
+            if "index_right" in subway_with_ridership.columns:
+                subway_with_ridership = subway_with_ridership.drop(
+                    columns=["index_right"]
+                )
+
+            subway_with_ridership = subway_with_ridership.drop_duplicates(
+                subset=["station_name", "geometry"]
+            )
+            self.subway_gdf = subway_with_ridership
+        else:
+            self.subway_gdf = subway_gdf
 
         # Convert to projected CRS for accurate distance calculations (meters)
         # EPSG:2263 - NAD83 / New York Long Island (ftUS) converted to meters
@@ -55,6 +99,7 @@ class Scorer:
         self.min_park_area = min_park_area
         self.max_park_distance = max_park_distance
         self.restaurant_radius = restaurant_radius
+        self.max_restaurant_score = max_restaurant_score
         self.parks_with_scores = None
 
     def calculate_park_accessibility(self) -> gpd.GeoDataFrame:
@@ -158,7 +203,6 @@ class Scorer:
         # - 14-27 = B grade
         # - 28+ = C grade
 
-        GRADE_TRESHOLDS = 20  # Score <= 20 includes A and most of B grades
         if self.parks_with_scores is None:
             raise ValueError("Run calculate_park_accessibility() first")
 
@@ -166,7 +210,7 @@ class Scorer:
 
         # Store quality restaurants as attribute for reuse in UI
         self.quality_restaurants_gdf = self.restaurants_gdf[
-            self.restaurants_gdf["score"] <= GRADE_TRESHOLDS
+            self.restaurants_gdf["score"] <= self.max_restaurant_score
         ].copy()
         good_restaurants = self.quality_restaurants_gdf
 

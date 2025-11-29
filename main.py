@@ -1,9 +1,12 @@
 import streamlit as st
+import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from data_loader.loader import DataLoader
 from scorer.scorer import Scorer
 
+
+#TODO: split this file into multiple modules according to tabs
 
 # crs flow
 # Input: lat/lon coordinates
@@ -20,10 +23,11 @@ def load_data():
     parks_df = DataLoader.download_parks()
     restaurants_df = DataLoader.download_restaurants()
     subway_df = DataLoader.download_subway_stations()
-    return parks_df, restaurants_df, subway_df
+    ridership_df = DataLoader.download_subway_ridership()
+    return parks_df, restaurants_df, subway_df, ridership_df
 
 
-parks_df, restaurants_df, subway_df = load_data()
+parks_df, restaurants_df, subway_df, ridership_df = load_data()
 
 # Sidebar configuration
 st.sidebar.header("⚙️ Configuration")
@@ -56,6 +60,15 @@ restaurant_radius = st.sidebar.slider(
     value=500,
     step=50,
     help="Parameter: restaurant_radius - Radius to count nearby quality restaurants",
+)
+
+max_restaurant_score = st.sidebar.slider(
+    "Max restaurant inspection score",
+    min_value=0,
+    max_value=50,
+    value=27,
+    step=1,
+    help="Parameter: max_restaurant_score - Only count restaurants with inspection score below this (0-13=A, 14-27=B, 28+=C)",
 )
 
 st.sidebar.subheader("Results")
@@ -91,6 +104,7 @@ current_params = {
     "min_park_area": min_park_area,
     "max_park_distance": max_park_distance,
     "restaurant_radius": restaurant_radius,
+    "max_restaurant_score": max_restaurant_score,
     "top_n_per_borough": top_n_per_borough,
     "min_score_threshold": min_score_threshold,
 }
@@ -106,9 +120,11 @@ if st.sidebar.button("🔍 Find Best Locations", type="primary"):
             parks_df,
             restaurants_df,
             subway_df,
+            ridership_df,
             min_park_area=min_park_area,
             max_park_distance=max_park_distance,
             restaurant_radius=restaurant_radius,
+            max_restaurant_score=max_restaurant_score,
         )
 
         best_parks = scorer.summary(top_n_per_borough=top_n_per_borough)
@@ -147,9 +163,21 @@ if "best_parks" in st.session_state:
         subway_wgs84 = scorer.subway_gdf.to_crs("EPSG:4326")
         for station_id in nearby_station_ids:
             station = subway_wgs84.loc[station_id]
+
+            # popup with ridership info
+            popup_text = (
+                f"<b>🚇 {station['station_name']}</b><br>Routes: {station['routes']}"
+            )
+            if "avg_daily_ridership" in station and pd.notna(
+                station["avg_daily_ridership"]
+            ):
+                popup_text += (
+                    f"<br>Daily Ridership: {int(station['avg_daily_ridership']):,}"
+                )
+
             folium.Marker(
                 location=[station.geometry.y, station.geometry.x],
-                popup=f"<b>🚇 {station['station_name']}</b><br>Routes: {station['routes']}",
+                popup=popup_text,
                 icon=folium.Icon(color="blue", icon="train", prefix="fa"),
                 tooltip=station["station_name"],
             ).add_to(m)
@@ -263,6 +291,20 @@ if "best_parks" in st.session_state:
                             )
 
                         st.info(f"**Why this location?** {park['justification']}")
+
+                        # Show nearby stations with ridership
+                        if len(park["nearby_station_ids"]) > 0:
+                            st.markdown("**Nearby Subway Stations:**")
+                            subway_wgs84 = scorer.subway_gdf.to_crs("EPSG:4326")
+                            for station_id in park["nearby_station_ids"]:
+                                if station_id in subway_wgs84.index:
+                                    station = subway_wgs84.loc[station_id]
+                                    station_info = f"• {station['station_name']} ({station['routes']})"
+                                    if "avg_daily_ridership" in station and pd.notna(
+                                        station["avg_daily_ridership"]
+                                    ):
+                                        station_info += f" - {int(station['avg_daily_ridership']):,} daily riders"
+                                    st.text(station_info)
 
         # Summary statistics
         st.subheader("📊 Summary Statistics")
