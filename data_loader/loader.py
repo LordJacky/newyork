@@ -44,7 +44,7 @@ def cache_result(cache_file: str):
 
 class DataLoader:
     CACHE_DIR = Path("cache")
-    CACHE_EXPIRY_HOURS = 3
+    CACHE_EXPIRY_HOURS = 5
 
     @staticmethod
     @cache_result("parks.parquet")
