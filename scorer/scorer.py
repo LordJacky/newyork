@@ -112,36 +112,32 @@ class Scorer:
         nearest[f"subway_count_{self.max_park_distance}m"] = subway_counts
         nearest["nearby_station_ids"] = nearby_station_ids
 
-        # Calculate accessibility score (inverse of distance, normalized)
-        # Closer = better score
-        # Base Accessibility Score (0-100)
+        # Calculate accessibility score using absolute thresholds
+        # Uses max_park_distance as the baseline for scoring
+        # Closer = better score, with bonus for multiple stations
 
-        # How it works:
-        # - Normalization: Converts distance to a 0-100 scale
-        # - Inverse relationship: Closer parks = higher score
-
-        # Example (if max_dist = 500m):
-        # Park 50m from subway:  100 * (1 - 50/500)  = 90 points
+        # Base Accessibility Score (0-100):
+        # Example (if max_park_distance = 500m):
+        # Park 0m from subway:   100 * (1 - 0/500)   = 100 points
+        # Park 100m from subway: 100 * (1 - 100/500) = 80 points
         # Park 250m from subway: 100 * (1 - 250/500) = 50 points
         # Park 500m from subway: 100 * (1 - 500/500) = 0 points
 
-        max_dist = nearest["distance_to_subway_m"].max()
-        if max_dist > 0:
-            nearest["accessibility_score"] = 100 * (
-                1 - nearest["distance_to_subway_m"] / max_dist
-            )
-        else:
-            nearest["accessibility_score"] = 100
+        nearest["accessibility_score"] = 100 * (
+            1 - nearest["distance_to_subway_m"] / self.max_park_distance
+        )
 
-        # Bonus for multiple nearby stations
-        # Logic:
-        # - More nearby stations = better transit options
-        # - Each additional station within 500m adds +5 points
+        # Bonus for multiple nearby stations (+10 points per additional station)
+        # More transit options = better accessibility
         # Example:
-        # Park A: 100m from 1 station  → 80 base + 5  = 85 total
-        # Park B: 150m from 3 stations → 70 base + 15 = 85 total (comparable!)
+        # Park A: 250m from 1 station  → 50 base + 0   = 50 total
+        # Park B: 250m from 3 stations → 50 base + 20  = 70 total
+        # Park C: 100m from 5 stations → 80 base + 40  = 120 total (capped at 100)
 
-        # nearest['accessibility_score'] += nearest['subway_count_500m'] * 5
+        station_bonus = (nearest[f"subway_count_{self.max_park_distance}m"] - 1) * 10
+        nearest["accessibility_score"] = (
+            nearest["accessibility_score"] + station_bonus
+        ).clip(upper=100)
 
         self.parks_with_scores = nearest
         return nearest
@@ -168,9 +164,11 @@ class Scorer:
 
         parks = self.parks_with_scores.copy()
 
-        good_restaurants = self.restaurants_gdf[
+        # Store quality restaurants as attribute for reuse in UI
+        self.quality_restaurants_gdf = self.restaurants_gdf[
             self.restaurants_gdf["score"] <= GRADE_TRESHOLDS
         ].copy()
+        good_restaurants = self.quality_restaurants_gdf
 
         # Count quality restaurants within radius for each park
         # Also store restaurant IDs for map display (to avoid recalculating)
@@ -186,16 +184,23 @@ class Scorer:
         parks[f"restaurant_count_{self.restaurant_radius}m"] = restaurant_counts
         parks["nearby_restaurant_ids"] = nearby_restaurant_ids
 
-        # Calculate social activity score (0-100)
-        # Normalizes restaurant counts: park with most restaurants = 100, others scaled proportionally
-        # Example: If max is 40 restaurants, park with 20 gets score of 50
-        max_count = parks[f"restaurant_count_{self.restaurant_radius}m"].max()
-        if max_count > 0:
-            parks["social_activity_score"] = (
-                100 * parks[f"restaurant_count_{self.restaurant_radius}m"] / max_count
-            )
-        else:
-            parks["social_activity_score"] = 0
+        # Calculate social activity score using absolute thresholds
+        # More restaurants within radius = higher score
+        # Uses a target of 20 quality restaurants as "excellent" (100 points)
+
+        # Social Activity Score (0-100):
+        # 0 restaurants   = 0 points
+        # 5 restaurants   = 25 points
+        # 10 restaurants  = 50 points
+        # 20 restaurants  = 100 points
+        # 30+ restaurants = 100 points (capped)
+
+        TARGET_RESTAURANT_COUNT = 10  # Number of restaurants for perfect score
+        parks["social_activity_score"] = (
+            100
+            * parks[f"restaurant_count_{self.restaurant_radius}m"]
+            / TARGET_RESTAURANT_COUNT
+        ).clip(upper=100)
 
         self.parks_with_scores = parks
         return parks
@@ -230,7 +235,7 @@ class Scorer:
         )
 
         self.parks_with_scores = balanced_parks
-        return parks
+        return balanced_parks
 
     def find_best_locations(self) -> pd.DataFrame:
         """
