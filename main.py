@@ -74,7 +74,7 @@ st.sidebar.subheader("Map Display")
 show_restaurants = st.sidebar.checkbox(
     "Show restaurants",
     value=False,
-    help="Display quality restaurants (score ≤ 20) near selected parks on the map"
+    help="Display quality restaurants (score ≤ 20) near selected parks on the map",
 )
 
 # Check if parameters changed
@@ -147,7 +147,9 @@ if "best_parks" in st.session_state:
             nearby_restaurant_ids.update(park["nearby_restaurant_ids"])
 
         # Get quality restaurants and convert to WGS84
-        quality_restaurants = scorer.restaurants_gdf[scorer.restaurants_gdf["score"] <= 20]
+        quality_restaurants = scorer.restaurants_gdf[
+            scorer.restaurants_gdf["score"] <= 20
+        ]
         restaurants_wgs84 = quality_restaurants.to_crs("EPSG:4326")
 
         for restaurant_id in nearby_restaurant_ids:
@@ -159,7 +161,7 @@ if "best_parks" in st.session_state:
                         f"<b>🍴 {restaurant['restaurant_name']}</b><br>"
                         f"Cuisine: {restaurant['cuisine']}<br>"
                         f"Inspection Score: {restaurant['score']:.0f}",
-                        max_width=250
+                        max_width=250,
                     ),
                     icon=folium.Icon(color="orange", icon="utensils", prefix="fa"),
                     tooltip=restaurant["restaurant_name"],
