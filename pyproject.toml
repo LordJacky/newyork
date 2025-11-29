@@ -1,0 +1,11 @@
+[project]
+name = "newyork"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "geopandas>=1.1.1",
+    "pandas>=2.3.3",
+    "sodapy>=2.2.0",
+]
