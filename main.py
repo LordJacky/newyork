@@ -6,7 +6,7 @@ from data_loader.loader import DataLoader
 from scorer.scorer import Scorer
 
 
-#TODO: split this file into multiple modules according to tabs
+# TODO: split this file into multiple modules according to tabs
 
 # crs flow
 # Input: lat/lon coordinates
