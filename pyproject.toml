@@ -5,8 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "folium>=0.20.0",
     "geopandas>=1.1.1",
     "pandas>=2.3.3",
     "pyarrow>=22.0.0",
     "sodapy>=2.2.0",
+    "streamlit>=1.50.0",
+    "streamlit-folium>=0.25.3",
 ]

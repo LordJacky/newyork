@@ -8,8 +8,10 @@ from functools import wraps
 # TODO: add error handling for network issues
 # TODO: validate data schema
 
+
 def cache_result(cache_file: str):
     """Decorator to cache function results to parquet file"""
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -26,7 +28,6 @@ def cache_result(cache_file: str):
                 else:
                     print(f"Cache expired for {cache_file}")
 
-            # Call the original function
             df = func(*args, **kwargs)
 
             # Save to cache
@@ -35,12 +36,15 @@ def cache_result(cache_file: str):
             print(f"Saved to cache: {cache_file}")
 
             return df
+
         return wrapper
+
     return decorator
+
 
 class DataLoader:
     CACHE_DIR = Path("cache")
-    CACHE_EXPIRY_HOURS = 1
+    CACHE_EXPIRY_HOURS = 3
 
     @staticmethod
     @cache_result("parks.parquet")
@@ -50,22 +54,33 @@ class DataLoader:
         results = client.get("enfh-gkve", limit=5000)
         df = pd.DataFrame.from_records(results)
 
-        if 'multipolygon' in df.columns:
-            df['longitude'] = df['multipolygon'].apply(
-            lambda x: float(x['coordinates'][0][0][0][0]) if pd.notna(x) and 'coordinates' in x else None
-        )
-            df['latitude'] = df['multipolygon'].apply(
-            lambda x: float(x['coordinates'][0][0][0][1]) if pd.notna(x) and 'coordinates' in x else None
-        )
+        if "multipolygon" in df.columns:
+            df["longitude"] = df["multipolygon"].apply(
+                lambda x: float(x["coordinates"][0][0][0][0])
+                if pd.notna(x) and "coordinates" in x
+                else None
+            )
+            df["latitude"] = df["multipolygon"].apply(
+                lambda x: float(x["coordinates"][0][0][0][1])
+                if pd.notna(x) and "coordinates" in x
+                else None
+            )
 
-        df = df.dropna(subset=['longitude', 'latitude'])
+        df = df.dropna(subset=["longitude", "latitude"])
 
-        df['acres'] = pd.to_numeric(df.get('acres', 0), errors='coerce').fillna(0)
-        df['park_name'] = df.get('signname', df.get('name', 'Unknown Park'))
-        df['borough'] = df.get('borough', 'Unknown')
-        df['park_type'] = df.get('typecategory', 'Unknown')
+        df["acres"] = pd.to_numeric(df.get("acres", 0), errors="coerce").fillna(0)
+        df["park_name"] = df.get("signname", df.get("name", "Unknown Park"))
+        df["borough"] = df.get("borough", "Unknown")
+        df["park_type"] = df.get("typecategory", "Unknown")
 
-        cols_to_keep = ['park_name', 'borough', 'acres', 'park_type', 'latitude', 'longitude']
+        cols_to_keep = [
+            "park_name",
+            "borough",
+            "acres",
+            "park_type",
+            "latitude",
+            "longitude",
+        ]
         df = df[[col for col in cols_to_keep if col in df.columns]]
 
         return df
@@ -90,22 +105,30 @@ class DataLoader:
 
         df = pd.DataFrame.from_records(all_results)
 
-        if 'latitude' in df.columns and 'longitude' in df.columns:
-            df['latitude'] = pd.to_numeric(df['latitude'], errors='coerce')
-            df['longitude'] = pd.to_numeric(df['longitude'], errors='coerce')
+        if "latitude" in df.columns and "longitude" in df.columns:
+            df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+            df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
 
-        df = df.dropna(subset=['longitude', 'latitude'])
+        df = df.dropna(subset=["longitude", "latitude"])
 
-        df['restaurant_name'] = df.get('dba', 'Unknown Restaurant')
-        df['cuisine'] = df.get('cuisine_description', 'Unknown')
-        df['borough'] = df.get('boro', 'Unknown')
-        df['zipcode'] = df.get('zipcode', '')
-        df['score'] = pd.to_numeric(df.get('score', None), errors='coerce')
+        df["restaurant_name"] = df.get("dba", "Unknown Restaurant")
+        df["cuisine"] = df.get("cuisine_description", "Unknown")
+        df["borough"] = df.get("boro", "Unknown")
+        df["zipcode"] = df.get("zipcode", "")
+        df["score"] = pd.to_numeric(df.get("score", None), errors="coerce")
 
-        cols_to_keep = ['restaurant_name', 'cuisine', 'borough', 'zipcode', 'score', 'latitude', 'longitude']
+        cols_to_keep = [
+            "restaurant_name",
+            "cuisine",
+            "borough",
+            "zipcode",
+            "score",
+            "latitude",
+            "longitude",
+        ]
         df = df[[col for col in cols_to_keep if col in df.columns]]
 
-        df = df.drop_duplicates(subset=['restaurant_name', 'latitude', 'longitude'])
+        df = df.drop_duplicates(subset=["restaurant_name", "latitude", "longitude"])
 
         return df
 
@@ -117,24 +140,25 @@ class DataLoader:
         results = client.get("39hk-dx4f", limit=5000)
         df = pd.DataFrame.from_records(results)
 
-        if 'gtfs_latitude' in df.columns and 'gtfs_longitude' in df.columns:
-            df['latitude'] = pd.to_numeric(df['gtfs_latitude'], errors='coerce')
-            df['longitude'] = pd.to_numeric(df['gtfs_longitude'], errors='coerce')
+        if "gtfs_latitude" in df.columns and "gtfs_longitude" in df.columns:
+            df["latitude"] = pd.to_numeric(df["gtfs_latitude"], errors="coerce")
+            df["longitude"] = pd.to_numeric(df["gtfs_longitude"], errors="coerce")
 
-        df = df.dropna(subset=['longitude', 'latitude'])
+        df = df.dropna(subset=["longitude", "latitude"])
 
-        df['station_name'] = df.get('stop_name', 'Unknown Station')
-        df['routes'] = df.get('daytime_routes', '')
-        df['borough'] = df.get('borough', 'Unknown')
-        df['ada_accessible'] = pd.to_numeric(df.get('ada', 0), errors='coerce')
+        df["station_name"] = df.get("stop_name", "Unknown Station")
+        df["routes"] = df.get("daytime_routes", "")
+        df["borough"] = df.get("borough", "Unknown")
+        df["ada_accessible"] = pd.to_numeric(df.get("ada", 0), errors="coerce")
 
-        cols_to_keep = ['station_name', 'routes', 'borough', 'ada_accessible', 'latitude', 'longitude']
+        cols_to_keep = [
+            "station_name",
+            "routes",
+            "borough",
+            "ada_accessible",
+            "latitude",
+            "longitude",
+        ]
         df = df[[col for col in cols_to_keep if col in df.columns]]
 
         return df
-
-
-
-
-
-
