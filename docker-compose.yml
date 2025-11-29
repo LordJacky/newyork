@@ -19,6 +19,7 @@ services:
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro
     depends_on:
       - streamlit
     restart: unless-stopped
